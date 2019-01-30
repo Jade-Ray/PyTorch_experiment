@@ -6,7 +6,6 @@ import os
 import torch
 import torch.nn as nn
 import torch.utils.data as Data
-from PIL import Image
 import torchvision
 import matplotlib.pyplot as plt
 
