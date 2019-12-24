@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torch.optim as optim
 
 
 class Net(nn.Module):
@@ -20,17 +21,14 @@ class Net(nn.Module):
         x = x.view(-1, self.num_flat_features(x))
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
-        print(x.size())
-        x = self.fc3(3)
+        x = self.fc3(x)
         return x 
 
     def num_flat_features(self, x):
         size = x.size()[1:]
         num_features = 1
         for s in size:
-            print(s)
             num_features *= s
-        print(num_features)
         return num_features
 
 net = Net()
@@ -44,3 +42,36 @@ for p in params:
 input = torch.randn(1, 1, 32, 32)
 out = net(input)
 print(out)
+
+net.zero_grad()
+out.backward(torch.randn(1, 10))
+
+# loss function
+output = net(input)
+target = torch.randn(10)
+target = target.view(1, -1)
+criterion = nn.MSELoss()
+
+loss = criterion(output, target)
+print(loss)
+print(loss.grad_fn)
+print(loss.grad_fn.next_functions[0][0])
+print(loss.grad_fn.next_functions[0][0].next_functions[0][0])
+
+# backprop
+net.zero_grad()
+print('conv1 bias.grad before backward')
+print(net.conv1.bias.grad)
+
+loss.backward()
+
+print('conv1.bias.grad after backward')
+print(net.conv1.bias.grad)
+
+# update the weights
+optimizer = optim.SGD(net.parameters(), lr=0.01)
+optimizer.zero_grad()
+output = net(input)
+loss = criterion(output, target)
+loss.backward()
+optimizer.step()
