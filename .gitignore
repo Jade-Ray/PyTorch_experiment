@@ -79,3 +79,5 @@ Data/faces/faces/person_TjahjonoDGondhowiardjo.jpg
 Data/faces/faces/person-7.jpg
 Data/faces/faces/person.jpg
 Data/faces/faces/personalpic.jpg
+Data/cifar-10-python.tar.gz
+TrainedModel/cifar_net.pth
