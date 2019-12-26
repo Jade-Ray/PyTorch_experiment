@@ -11,6 +11,8 @@ data_size = 100
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
+print (device)
+
 class RandomDataset(Dataset):
     
     def __init__(self, size, length):
