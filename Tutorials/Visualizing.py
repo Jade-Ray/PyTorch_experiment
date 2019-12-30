@@ -78,7 +78,7 @@ writer.add_image('four_fashion_mnist_images', img_grid)
 writer.add_graph(net, images)
 # writer.close()
 
-def select_n_random(data, labels, n=10):
+def select_n_random(data, labels, n=100):
     assert len(data) == len(labels)
     perm = torch.randperm(len(data))
     return data[perm][:n], labels[perm][:n]
@@ -110,3 +110,52 @@ def plot_classes_preds(net, images, labels):
             probs[idx] * 100.0,
             classes[labels[idx]]
         ), color=("green" if preds[idx] == labels[idx].item() else "red"))
+    return fig
+
+running_loss = 0.0
+for epoch in range(1):
+    for i, data in enumerate(trainloader, 0):
+        inputs, labels = data
+        optimizer.zero_grad()
+        outputs = net(inputs)
+        loss = criterion(outputs, labels)
+        loss.backward()
+        optimizer.step()
+
+        running_loss += loss.item()
+        if i % 1000 == 999:
+            writer.add_scalar('training loss', 
+                            running_loss / 1000, 
+                            epoch * len(trainloader) + i)
+            writer.add_figure('predictions vs. actuals', 
+                            plot_classes_preds(net, inputs, labels), 
+                            global_step=epoch * len(trainloader) + i)
+            running_loss = 0.0
+print('Finished Training')
+
+class_probs = []
+class_preds = []
+with torch.no_grad():
+    for data in testloader:
+        images, labels = data
+        output = net(images)
+        class_probs_batch = [F.softmax(el, dim=0) for el in output]
+        _, class_preds_batch = torch.max(output, 1)
+        class_probs.append(class_probs_batch)
+        class_preds.append(class_preds_batch)
+
+test_probs = torch.cat([torch.stack(batch) for batch in class_probs])
+test_preds = torch.cat(class_preds)
+
+def add_pr_curve_tensorboard(class_index, test_probs, test_preds, global_step=0):
+    tensorboard_preds = test_preds == class_index
+    tensorboard_probs = test_probs[:, class_index]
+
+    writer.add_pr_curve(classes[class_index], 
+                        tensorboard_preds, 
+                        tensorboard_probs, 
+                        global_step=global_step)
+    writer.close()
+
+for i in range(len(classes)):
+    add_pr_curve_tensorboard(i, test_probs, test_preds)
