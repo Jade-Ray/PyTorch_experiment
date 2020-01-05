@@ -85,8 +85,9 @@ def train(epoch):
         optimizer.zero_grad()
         output = model(data)
         loss = F.nll_loss(output, target)
+        loss.backward()
         optimizer.step()
-        if batch_idx % 500 == 0:
+        if batch_idx % 100 == 0:
             print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                 epoch, batch_idx * len(data), len(train_loader.dataset),
                 100. * batch_idx / len(train_loader), loss.item()))
@@ -134,6 +135,8 @@ def visualize_stn():
 
         axarr[1].imshow(out_grid)
         axarr[1].set_title('Transformed Images')
+
+print(model)
 
 for epoch in range(1, 20 + 1):
     train(epoch)
