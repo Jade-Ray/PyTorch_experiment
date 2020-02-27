@@ -159,3 +159,5 @@ def add_pr_curve_tensorboard(class_index, test_probs, test_preds, global_step=0)
 
 for i in range(len(classes)):
     add_pr_curve_tensorboard(i, test_probs, test_preds)
+
+# %%
