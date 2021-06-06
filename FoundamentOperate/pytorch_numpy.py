@@ -1,3 +1,5 @@
+# %%[markdown]
+# Compare tensor operation in PyTorch and Numpy
 import torch
 import numpy as np
 
@@ -10,6 +12,7 @@ print(
     '\ntensor to array:\n', tensor2array,  # [[0 1 2], [3 4 5]]
 )
 
+# %%[markdown]
 # abs 绝对值计算
 data = [-1, -2, 1, 2]
 tensor = torch.FloatTensor(data)  # 转换成32位浮点 tensor
@@ -19,6 +22,7 @@ print(
     '\ntorch: ', torch.abs(tensor)      # [1 2 1 2]
 )
 
+# %%[markdown]
 # sin   三角函数 sin
 print(
     '\nsin',
@@ -26,6 +30,8 @@ print(
     '\ntorch: ', torch.sin(tensor)  # [-0.8415 -0.9093  0.8415  0.9093]
 )
 
+
+# %%[markdown]
 # mean  均值
 print(
     '\nmean',
@@ -33,6 +39,7 @@ print(
     '\ntorch: ', torch.mean(tensor)     # 0.0
 )
 
+# %%[markdown]
 # matrix multiplication 矩阵点乘
 data = [[1, 2], [3, 4]]
 tensor = torch.FloatTensor(data)  # 转换成32位浮点 tensor
@@ -43,6 +50,7 @@ print(
     '\ntorch: ', torch.mm(tensor, tensor)   # [[7, 10], [15, 22]]
 )
 
+# %%[markdown]
 # !!!!  下面是错误的方法 !!!!
 # torch无法对2矩阵使用dot
 data = np.array(data)

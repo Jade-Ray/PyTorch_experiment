@@ -1,3 +1,5 @@
+# %%[markdown]
+# Showing different activate func curve
 import torch
 import torch.nn.functional as F     # 激励函数都在这
 from torch.autograd import Variable
@@ -38,3 +40,5 @@ plt.ylim((-0.2, 6))
 plt.legend(loc='best')
 
 plt.show()
+
+# %%
