@@ -1,6 +1,6 @@
 # Some Foundament Operation of PyTorch
 
-Introduction to PyTorch with these sample:
+Introduction to PyTorch with these samples:
 
 - Some operate about basic type `Tensors`
 

@@ -1,5 +1,15 @@
-Data/
-.data/
-TrainedModel/
-runs/
-.vscode/
+# vscode config
+.vscode
+
+# pycharm config
+.idea
+
+# saved model wights, model and visualize temp files 
+*.pt
+*.pkl
+*.pth
+**/runs
+
+# downloade Dataset and model
+**/Data
+**/.data
