@@ -6,6 +6,8 @@ Junior networks worked simple & shallow Task with these samples:
 
     - `quick_build_net.py` : Creating Net inherited `torch.nn.Module` to DL
 
+    - `NeuralNetworks.py` : Creating complexity Net includes convolutional layer to DL
+
     - `optimizer_speed_up_train.py` : Showing different `Optimizer` effection of Net training
 
     - `batch_train.py` : Using mutil-batch to train Net
@@ -24,7 +26,9 @@ Junior networks worked simple & shallow Task with these samples:
 
 - CNN
 
-    - `cnn_minst.py` : Using Convolutional Neural Network to train classifier of `MINST Dataset`
+    - `cnn_classifier_minst.py` : Using Convolutional Neural Network to train classifier of `MINST Dataset`
+
+    - `cnn_classifier_cifar10.py` : Using Convolutional Neural Network to train classifier of `CIFAR10 Dataset`
 
 - RNN
 

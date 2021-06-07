@@ -2,7 +2,7 @@
 # # 0️⃣Access to the raw dataset iterators
 import torch
 from torchtext.datasets import AG_NEWS
-train_iter = AG_NEWS(root='.data/ag_news_csv', split='train')
+train_iter = AG_NEWS(root='data/ag_news_csv', split='train')
 print(next(train_iter))
 print(next(train_iter))
 print(next(train_iter))
