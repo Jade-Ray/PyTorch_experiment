@@ -14,7 +14,9 @@ Common method of `Natural Language Processing (NLP)` with these samples:
 
     - `TranslationS2S.py` : Translate sequence to sequence
 
-- Transformer based on paper [Attention is All You Need]("https://arxiv.org/pdf/1706.03762.pdf")
+- Transformer *( based on paper [Attention is All You Need](https://arxiv.org/pdf/1706.03762.pdf) )*
+    
+    - `TransformerS2S.py` : Introduce how to train a sequence-to-sequence model that uses the `nn.Transformer` module. Just using transform encoden layers, with directly compare with output sequence embedded.
 
 ---
 
@@ -47,3 +49,7 @@ Common method of `Natural Language Processing (NLP)` with these samples:
   - AttentionDecoder
 
     ![Image of Attention decoder](https://pytorch.org/tutorials/_images/attention-decoder-network.png)
+
+#### The Architecture of Transformer
+
+![transformer architecture](https://pytorch.org/tutorials/_images/transformer_architecture.jpg)
