@@ -1,5 +1,7 @@
 # %% [markdown]
 # # 1️⃣Preparing the Data
+# ***Classifying names with a character-level RNN***. 
+# Not using many of convenience functions of torchtext.
 
 from __future__ import unicode_literals, print_function, division
 from io import open
@@ -27,9 +29,11 @@ def unicodeToAscii(s):
     )
 print(unicodeToAscii('Ślusàrski'))
 
+# Build the category_lines dictionary, a list of names per language
 category_lines = {}
 all_categories = []
 
+# Read a file and split into lines
 def readLines(filename):
     lines = open(filename, encoding='utf-8').read().strip().split('\n')
     return [unicodeToAscii(line) for line in lines]
@@ -48,8 +52,11 @@ print(category_lines['Polish'][:5])
 
 # %% [markdown]
 # # 2️⃣Turning Names into Tensors
+# Use one-hot vector of size `<1 x n_letters>`
+
 import torch
 
+# Find letter index from all_letters. e.g. "a" = 0
 def letter2Index(letter):
     return all_letters.find(letter)
 
@@ -59,8 +66,7 @@ def letter2Tensor(letter):
     tensor[0][letter2Index(letter)] = 1
     return tensor
 
-# Turn a line into a <line_length x 1 x n_letters>,
-# or an array of one-hot letter vectors
+# Turn a line into a <line_length x 1 x n_letters>, or an array of one-hot letter vectors
 def line2Tensor(line):
     tensor = torch.zeros(len(line), 1, n_letters)
     for li, letter in enumerate(line):
@@ -74,6 +80,7 @@ print(line2Tensor('Jones').size())
 
 # %% [markdown]
 # # 3️⃣Creating the Network
+
 import torch.nn as nn
 
 class RNN(nn.Module):
@@ -107,12 +114,15 @@ output, next_hidden = rnn(input, hidden)
 print(output)
 
 input2 = line2Tensor("Albert")
+hidden = torch.zeros(1, n_hidden)
 
 output, next_hidden = rnn(input2[0], hidden)
 print(output)
+
 # %% [markdown]
 # # 4️⃣Training
 # 💠***preparing for training***
+
 def categoryFromOutput(output):
     # use Tensor.topk to get the index of the greatest value
     top_n, top_i = output.topk(1)
@@ -142,9 +152,18 @@ for i in range(10):
 criterion = nn.NLLLoss()
 learning_rate = 0.005
 
+# each loop of training will:
+# - create input and target tensors
+# - create a zeroed initial hidden state
+# - read each lettere in and keep hidden state for next letter
+# - compare final output to target
+# - back_propagate
+# - return the output and loss
 def train(category_tensor, line_tensor):
     hidden = rnn.initHidden()
+
     rnn.zero_grad()
+
     for i in range(line_tensor.size()[0]):
         output, hidden = rnn(line_tensor[i], hidden)
     
@@ -155,7 +174,7 @@ def train(category_tensor, line_tensor):
     for p in rnn.parameters():
         p.data.add_(p.grad.data, alpha=-learning_rate)
     
-    return output, loss
+    return output, loss.item()
 
 import math
 import time
@@ -201,15 +220,19 @@ plt.plot(all_losses)
 
 # %% [markdown]
 # # 5️⃣Evaluating and Results
-confusion = torch.zeros(n_categories, n_categories) # Keep track of correct guesses in a confusion matrix
+
+# Keep track of correct guesses in a confusion matrix
+confusion = torch.zeros(n_categories, n_categories) 
 n_confusion = 10000
 
+# Just return an output given a ine
 def evaluate(line_tensor):
     hidden = rnn.initHidden()
     for i in range(line_tensor.size()[0]):
         output, hidden = rnn(line_tensor[i], hidden)
     return output
 
+# Go through a bunch of examples and record which are correctly guessed
 for i in range(n_confusion):
     category, line, category_tensor, line_tensor = randomTrainingExample()
     output = evaluate(line_tensor)
@@ -221,14 +244,17 @@ for i in range(n_confusion):
 for i in range(n_categories):
     confusion[i] = confusion[i] / confusion[i].sum()
 
+# set up plot
 fig = plt.figure()
 ax = fig.add_subplot(1, 1, 1)
 cax = ax.matshow(confusion.numpy())
 fig.colorbar(cax)
 
+# set up axes
 ax.set_xticklabels([''] + all_categories, rotation=90)
 ax.set_yticklabels([''] + all_categories)
 
+# force labeel at every tick
 ax.xaxis.set_major_locator(ticker.MultipleLocator(1))
 ax.yaxis.set_major_locator(ticker.MultipleLocator(1))
 

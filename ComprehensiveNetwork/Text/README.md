@@ -8,7 +8,7 @@ Common method of `Natural Language Processing (NLP)` with these samples:
 
 - RNN & LSTM & GRU
 
-    - `ClassifyNames.py` : Classify different country names
+    - `ClassifyNames.py` : Classify different country names via RNN without connvenience function of torchtext, so also introduce some basic operate of NPL.
 
     - `GeneratNames.py` : Generate different country names
 
