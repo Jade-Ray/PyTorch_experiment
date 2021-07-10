@@ -1,5 +1,9 @@
 # %% [markdown]
 # # 1️⃣Preparing the Data
+# ***Generating names from languages with a character-level RNN***. 
+# hand-crafting a samll RNN with a few linear layers.
+# *One to sequence*
+
 from __future__ import unicode_literals, print_function, division
 from io import open
 import glob
@@ -80,9 +84,12 @@ rnn = RNN(n_letters, n_hidden, n_letters)
 # # 3️⃣Training
 # 💠***preparing for training***
 import random
+
+# Random item from a list
 def randomChoice(l):
     return l[random.randint(0, len(l) - 1)]
 
+# Get a random category and random line from that category
 def randomTrainingPair():
     category = randomChoice(all_categories)
     line = randomChoice(category_lines[category])
