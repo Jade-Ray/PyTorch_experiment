@@ -10,9 +10,9 @@ Common method of `Natural Language Processing (NLP)` with these samples:
 
     - `ClassifyNames.py` : Classify different country names via RNN without connvenience function of torchtext, so also introduce some basic operate of NPL.
 
-    - `GeneratNames.py` : Generate different country names
+    - `GeneratNames.py` : Generate different country names via RNN with some linear.
 
-    - `TranslationS2S.py` : Translate sequence to sequence
+    - `TranslationS2S.py` : Translate sequence to sequence via two recurrent neural networks work together( encoder and decoder with attention that from input to output embedding word ).
 
 - Transformer *( based on paper [Attention is All You Need](https://arxiv.org/pdf/1706.03762.pdf) )*
     

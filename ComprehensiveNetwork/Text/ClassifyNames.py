@@ -2,6 +2,7 @@
 # # 1️⃣Preparing the Data
 # ***Classifying names with a character-level RNN***. 
 # Not using many of convenience functions of torchtext.
+# *Sequence to one.*
 
 from __future__ import unicode_literals, print_function, division
 from io import open
