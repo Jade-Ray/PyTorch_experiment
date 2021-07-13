@@ -12,7 +12,7 @@ Common method of `Natural Language Processing (NLP)` with these samples:
 
     - `GeneratNames.py` : Generate different country names via RNN with some linear.
 
-    - `TranslationS2S.py` : Translate sequence to sequence
+    - `TranslationS2S.py` : Translate sequence to sequence via two recurrent neural networks work together( encoder and decoder with attention that from input to output embedding word ).
 
 - Transformer *( based on paper [Attention is All You Need](https://arxiv.org/pdf/1706.03762.pdf) )*
     

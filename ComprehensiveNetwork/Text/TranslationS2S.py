@@ -1,5 +1,10 @@
 # %% [markdown]
 # # 1️⃣Preparing the Data
+# ***Translation with a Sequence to Sequence Network and Attention***
+# also introduce how torchtext can handle much preprocessing.
+#  ---
+# This is made possible by the simple but powerful idea of the sequence to sequence network, in which two recurrent neural networks work together to transform one sequence to another. An encoder network condenses an input sequence into a vector, and a decoder network unfolds that vector into a new sequence.
+
 from __future__ import unicode_literals, print_function, division
 from io import open
 import unicodedata
@@ -8,23 +13,27 @@ import re
 import random
 
 import torch
-from torch._C import device
 import torch.nn as nn
 from torch import optim
 import torch.nn.functional as F
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+# %% [markdown]
+# 💠***Loading data files***
+# ---
+# Representing each word in a language as a one-hot vector.
 SOS_token = 0
 EOS_token = 1
 
+# help class which has word to index and index to word dictionaries. And trim the data to only use a few thousand words per language consided much larger encoding vector.
 class Lang:
     def __init__(self, name) -> None:
         self.name = name
         self.word2index = {}
-        self.word2count = {}
+        self.word2count = {} # used to replace rare words later
         self.index2word = {0: "SOS", 1: "EOS"}
-        self.n_words = 2
+        self.n_words = 2 # Count SOS and EOS
 
     def addSentence(self, sentence):
         for word in sentence.split(' '):
@@ -55,9 +64,14 @@ def normalizeString(s):
 
 def readLangs(lang1, lang2, reverse=False):
     print("Reading lines...")
-    lines = open("e:/mycode/pycode/PyTorch_learn/Tutorials/Text/NLPfromScratch/data/%s-%s.txt" %(lang1, lang2), encoding='utf-8').read().strip().split('\n')
+
+    # Read the file and split into lines
+    lines = open("data/%s-%s.txt" %(lang1, lang2), encoding='utf-8').read().strip().split('\n')
+    
+    # Split every line into pairs and normalize
     pairs = [[normalizeString(s) for s in l.split('\t')] for l in lines]
 
+    # Reverse pairs, make Lang instances
     if reverse:
         pairs = [list(reversed(p)) for p in pairs]
         input_lang = Lang(lang2)
@@ -68,6 +82,7 @@ def readLangs(lang1, lang2, reverse=False):
     
     return input_lang, output_lang, pairs
 
+# Trim the data set to only relatively short and simple sentences with 10 words in order to train something quickly. And filtering to sentence that translate to the form of eng_prefixes.
 MAX_LENGTH = 10
 
 eng_prefixes = (
@@ -85,6 +100,9 @@ def filterPair(p):
 def filterPairs(pairs):
     return [pair for pair in pairs if filterPair(pair)]
 
+# Read text file and split into lines, split lines into pairs.
+# Normalize text, filter by length and content.
+# Make word lists from sentences in pairs.
 def PreparData(lang1, lang2, reverse=False):
     input_lang, output_lang, pairs = readLangs(lang1, lang2, reverse)
     print("Read {} sentence pairs".format(len(pairs)))
@@ -104,8 +122,11 @@ input_lang, output_lang, pairs = PreparData('eng', 'fra', True)
 print(random.choice(pairs))
 
 # %% [markdown]
-# # 2️⃣The Seq2Seq Model
+# # 2️⃣The Seq2Seq Model, or Encoder Decoder network
 # 💠***the Encoder***
+# ---
+# - Consisting of two RNNs called the encoder and decoder. The encoder reads an input sequence and outputs a single vector(context), and the decoder reads that vector to produce an output sequence. 
+# - Frees us from sequence length and order, because it would be difficult to produce a correct translation directly from the sequence of input words that correspond many output  words in other language. 
 class EncoderRNN(nn.Module):
     def __init__(self, input_size, hidden_size):
         super(EncoderRNN, self).__init__()
@@ -115,9 +136,11 @@ class EncoderRNN(nn.Module):
         self.gru = nn.GRU(hidden_size, hidden_size)
 
     def forward(self, input, hidden):
-        # [hidden_size] -> [1, 1, hidden_size]
+        # [input_size] -> embedded[hidden_size] -> [1, 1, hidden_size]
         embedded = self.embedding(input).view(1, 1, -1)
         output = embedded
+        # output -> [1, 1, embedding_size]
+        # hidden -> [1, 1, hidden_size]
         output, hidden = self.gru(output, hidden)
         return output, hidden
 
@@ -126,6 +149,9 @@ class EncoderRNN(nn.Module):
 
 # %% [markdown]
 # 💠***the Decoder***
+# ---
+# - use only last output of the encoder (`context vetext`) as it encodes context from the entire sequence, which used as the initial state of the decoder.
+# - at every step of decoding, the decoder is given an input token and hidden state.The initial input is the start-of-string <`SOS`> token, and the first hidden state is the context vector.
 class DecoderRNN(nn.Module):
     def __init__(self, hidden_size, output_size):
         super(DecoderRNN, self).__init__()
@@ -148,6 +174,10 @@ class DecoderRNN(nn.Module):
 
 # %% [markdown]
 # 💠***the Attention Decoder***
+# ---
+# - attention allows the decoder network to "focus" on a different part of the encoder's outputs for every step of the decoder's own outputs.
+# - calculate a set of attention weights. These will be multiplied by the encoder output vectors to create a weighted combination, which should contain information about that specific part of the input sequence, and thus help the decoder choose the right output words.
+# - using the decoder's input and hidden state as inputs to calculate the attention weights.
 class AttnDecoderRNN(nn.Module):
     def __init__(self, hidden_size, output_size, dropout_p=0.1, max_length=MAX_LENGTH):
         super(AttnDecoderRNN, self).__init__()
@@ -204,6 +234,9 @@ def tensorsFromPair(pair):
 
 # %% [markdown]
 # 💠***training the model***
+# ---
+# - `Teacher forcing` is the concept of using the real target outputs as each next input, instead of using the decoder's guess as the next input. Which causes it to converge faster but *when the trained network is exploited, it may exhibit instablility*.
+# - teacher-forced networks that read with coherent grammar but wander far from the correct translation.
 teacher_forcing_ratio = 0.5
 
 def train(input_tensor, target_tensor, encoder: EncoderRNN, decoder: AttnDecoderRNN, encoder_optimizer, decoder_optimizer, criterion, max_length=MAX_LENGTH):
@@ -268,6 +301,10 @@ def timeSince(since, percent):
     rs = es - s
     return "{} (- {})".format(asMinutes(s), asMinutes(rs))
 
+# Start a timer
+# Initialize optimizers and criterion
+# Create set of training pairs
+# Start empty losses array plotting
 def trainIters(encoder:EncoderRNN, decoder:AttnDecoderRNN, n_iters, print_every=1000, plot_every=100, learning_rate=0.01):
     start = time.time()
     plot_losses = []
@@ -310,6 +347,7 @@ import numpy as np
 def showPlot(points):
     plt.figure()
     fig, ax = plt.subplots()
+    # this locator puts ticks at regular intervals
     loc = ticker.MultipleLocator(base=0.2)
     ax.yaxis.set_major_locator(loc)
     plt.plot(points)
@@ -369,7 +407,10 @@ trainIters(encoder1, attn_decoder1, 75000, print_every=5000)
 
 evaluateRandomly(encoder1, attn_decoder1)
 
-# %%
+# %% [markdown]
+# ***💠Visualizing Attention***
+# ---
+# the columns being input steps and rows being output steps.
 output_words, attentions = evaluate(encoder1, attn_decoder1, "je suis trop froid .")
 plt.matshow(attentions.numpy())
 plt.show()
