@@ -4,7 +4,7 @@ Common method of `Natural Language Processing (NLP)` with these samples:
 
 - TorchText package Usage
 
-    - `TextCalssification.py` : Classify different text type via `AG_NEWS` provided by TorchText
+    - `TextCalssification.py` : Classify different text type via `AG_NEWS` provided by TorchText, intorducing the basical operation of NPL in TorchText.
 
 - RNN & LSTM & GRU
 
