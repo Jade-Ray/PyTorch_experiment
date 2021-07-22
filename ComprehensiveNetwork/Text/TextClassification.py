@@ -1,31 +1,52 @@
 # %% [markdown]
 # # 0️⃣Access to the raw dataset iterators
+# Build the dataset for the text classification analysis using the torchtext library
+# ---
+# - `AG_NEWS` dataset iterators yield the raw data as a tuple of label and text
+# - `AG_NEWS` dataset has four labels
+#   - 1 : World
+#   - 2 : Sports
+#   - 3 : Business
+#   - 4 : Sci/Tec
 import torch
 from torchtext.datasets import AG_NEWS
-train_iter = AG_NEWS(root='data/ag_news_csv', split='train')
+train_iter = AG_NEWS(root='data', split='train')
 print(next(train_iter))
 print(next(train_iter))
 print(next(train_iter))
 
 # %% [markdown]
 # # 1️⃣Prepare data processing piplines
+# ---
+# - very basic components of the torchtext including vocab, word vectors, tokenizer
+# - build a vocabulary with the raw training dataset through factory function `build_vocab_from_iterator` which accepts iterator that yield list or iterator of tokens. And users can also pass any special symbols to be added to the vocabulary
 from torchtext.data.utils import get_tokenizer
-from collections import Counter
-from torchtext.vocab import Vocab
+from torchtext.vocab import build_vocab_from_iterator
 
 tokenizer = get_tokenizer('basic_english')
-counter = Counter()
-for (label, line) in train_iter:
-    counter.update(tokenizer(line))
-vocab = Vocab(counter, min_freq=1)
+train_iter = AG_NEWS(root='data', split='train')
 
-text_pipeline = lambda x: [vocab[token] for token in tokenizer(x)]
+def yield_tokens(data_iter):
+    for _, text in data_iter:
+        yield tokenizer(text)
+
+vocab = build_vocab_from_iterator(yield_tokens(train_iter), specials=["<unk>"])
+vocab.set_default_index(vocab["<unk>"])
+
+print(vocab(['here', 'is', 'an', 'example']))
+
+# prepare the text processing pipeline with the tokenizer and vocabulary
+text_pipeline = lambda x: vocab(tokenizer(x))
 label_pipeline = lambda x: int(x) - 1
 
 print(text_pipeline('here is the an example.'))
 print(label_pipeline('10'))
+
 # %% [markdown]
 # # 2️⃣Generate data batch and iterator
+# ---
+# - `DataLoader` works with a map-style dataset that inplements the `getitem()` and `len()` protocols, and it also works with an iterable dataset
+# - before sending to the model, `collate_fn` function works on a batch of samples generated from `DataLoader`, which processes input accorrding to the data processing pipelines declaared previously 
 from torch.utils.data import DataLoader
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -37,15 +58,21 @@ def collate_batch(batch):
         text_list.append(processed_text)
         offsets.append(processed_text.size(0))
     label_list = torch.tensor(label_list, dtype=torch.int64)
+    # cumsum return the cumulative sum of the elements along a given axis
     offsets = torch.tensor(offsets[:-1]).cumsum(dim=0)
     text_list = torch.cat(text_list)
     return label_list.to(device), text_list.to(device), offsets.to(device)
 
-train_iter = AG_NEWS(root='.data/ag_news_csv', split='train')
+train_iter = AG_NEWS(root='data', split='train')
 dataloader = DataLoader(train_iter, batch_size=8, shuffle=False, collate_fn=collate_batch)
 
 # %% [markdown]
 # # 3️⃣Define the model
+# the model is composed of the `nn.EmbeddingBag` layer plus a linear layer for the classification purpose
+# ---
+# - `nn.EmbeddingBag` with the default mode of "mean" computes the mean value of a "bag" of embeddings. Although the text entries here have different lengths, which module requires no padding here since the text lengths arre saved in offsets.
+# - `nn.EmbeddingBag` can enhance the performance and memory efficiency to process a sequence of tensors since which accumulates the average across the embeddings on the fly.
+# - `mean` mode equivalent to `Embbedding` followed by `torch.mean(dim=0)`
 from torch import nn
 
 class TextClassificationModel(nn.Module):
@@ -66,7 +93,8 @@ class TextClassificationModel(nn.Module):
         embedded = self.embedding(text, offsets)
         return self.fc(embedded)
 
-train_iter = AG_NEWS(root='.data/ag_news_csv', split='train')
+# Build a model with embedding dimension of 64, and vocab size is equal to the length of the vocabulary instance, and the number of classes is equal to the number of labels
+train_iter = AG_NEWS(root='data', split='train')
 num_class = len(set([label for (label, text) in train_iter ]))
 vocab_size = len(vocab)
 emsize = 64
@@ -111,18 +139,25 @@ def evaluate(dataloader):
 
 # %% [markdown]
 # 💠***split the dataset and run the model***
+# ---
+# - split `AG_NEWS` training dataset into train/valid with ratio of 0.95 and 0.05
+# - `CrossEntropyLoss` criterion combines `LogSoftmax()` and `NLLLoss()` in a single class, which is useful in classification problem
+# - `SGD` implements stochastic gradient descent method as the optimizer
+# - `StepLR` is used to adjust the learning rate through epochs
 from torch.utils.data.dataset import random_split
-EPOCHS = 10
-LR = 5
-BATCH_SIZE = 64
+from torchtext.data.functional import to_map_style_dataset
+# Hyperparameters
+EPOCHS = 10 # epoch
+LR = 5 # learning rate
+BATCH_SIZE = 64 # batch size for training
 
 criterion = nn.CrossEntropyLoss()
 optimizer = torch.optim.SGD(model.parameters(), lr=LR)
 scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1.0, gamma=0.1)
 total_acc = None
-train_iter, test_iter = AG_NEWS(root='.data/ag_news_csv')
-train_dataset = list(train_iter)
-test_dataset = list(test_iter)
+train_iter, test_iter = AG_NEWS(root='data')
+train_dataset = to_map_style_dataset(train_iter)
+test_dataset = to_map_style_dataset(test_iter)
 num_train = int(len(train_dataset) * 0.95)
 split_train_, split_valid_ = random_split(train_dataset, [num_train, len(train_dataset) - num_train])
 

@@ -4,19 +4,21 @@ Common method of `Natural Language Processing (NLP)` with these samples:
 
 - TorchText package Usage
 
-    - `TextCalssification.py` : Classify different text type via `AG_NEWS` provided by TorchText
+    - `TextCalssification.py` : Classify different text type via `AG_NEWS` provided by TorchText, intorducing the basical operation of NPL in TorchText.
 
 - RNN & LSTM & GRU
 
     - `ClassifyNames.py` : Classify different country names via RNN without connvenience function of torchtext, so also introduce some basic operate of NPL.
 
-    - `GeneratNames.py` : Generate different country names via RNN with some linear.
+    - `GeneratNames.py` : Generate different country names via RNN with some linear. Sepcifically add application of LSTM and GRU model net.
 
     - `TranslationS2S.py` : Translate sequence to sequence via two recurrent neural networks work together( encoder and decoder with attention that from input to output embedding word ).
 
 - Transformer *( based on paper [Attention is All You Need](https://arxiv.org/pdf/1706.03762.pdf) )*
     
     - `TransformerS2S.py` : Introduce how to train a sequence-to-sequence model that uses the `nn.Transformer` module. Just using transform encoden layers, with directly compare with output sequence embedded.
+    
+    - `TranslationS2S_Transformer.py` : Integrated using `nn.Transformer` module complete S2S translation, which prof better than translation via recurrent neural networks. 
 
 ---
 

@@ -81,6 +81,58 @@ n_hidden = 128
 rnn = RNN(n_letters, n_hidden, n_letters)
 
 # %% [markdown]
+# 💠***LSTM model network***
+class LSTM(nn.Module):
+    def __init__(self, input_size, hidden_size, output_size):
+        super(LSTM, self).__init__()
+        self.hidden_size = hidden_size
+
+        self.lstm = nn.LSTM(n_categories + input_size, hidden_size)
+        self.o2o = nn.Linear(hidden_size, output_size)
+        self.dropout = nn.Dropout(0.1)
+        self.softmax = nn.LogSoftmax(dim=1)
+
+    def forward(self, categroy, input, hidden):
+        input_combined = torch.cat((categroy, input), 1).unsqueeze(0)
+        output, hidden = self.lstm(input_combined, hidden)
+        output = self.o2o(output)
+        output = self.dropout(output)
+        output = self.softmax(output[0])
+        return output, hidden
+
+    def initHidden(self):
+        h0 = torch.zeros(1, 1, self.hidden_size)
+        c0 = torch.zeros(1, 1, self.hidden_size)
+        return (h0, c0)
+
+lstm = LSTM(n_letters, n_hidden, n_letters)
+
+# %% [markdown]
+# 💠***GRU model network***
+class GRU(nn.Module):
+    def __init__(self, input_size, hidden_size, output_size):
+        super(GRU, self).__init__()
+        self.hidden_size = hidden_size
+        
+        self.gru = nn.GRU(n_categories + input_size, hidden_size)
+        self.o2o = nn.Linear(hidden_size, output_size)
+        self.dropout = nn.Dropout(0.1)
+        self.softmax = nn.LogSoftmax(dim=1)
+
+    def forward(self, categroy, input, hidden):
+        input_combined = torch.cat((categroy, input), 1).unsqueeze(0)
+        output, hidden = self.gru(input_combined, hidden)
+        output = self.o2o(output)
+        output = self.dropout(output)
+        output = self.softmax(output[0])
+        return output, hidden
+
+    def initHidden(self):
+        return torch.zeros(1, 1, self.hidden_size)
+
+gru = GRU(n_letters, n_hidden, n_letters)
+
+# %% [markdown]
 # # 3️⃣Training
 # 💠***preparing for training***
 import random
@@ -128,20 +180,20 @@ def randomTrainingExample():
 criterion = nn.NLLLoss()
 learning_rate = 0.0005
 
-def train(category_tensor, input_line_tensor, target_line_tensor):
+def train(category_tensor, input_line_tensor, target_line_tensor, net=rnn):
     target_line_tensor.unsqueeze_(-1)
-    hidden = rnn.initHidden()
-    rnn.zero_grad()
+    hidden = net.initHidden()
+    net.zero_grad()
     loss = 0
 
     for i in range(input_line_tensor.size(0)):
-        output, hidden = rnn(category_tensor, input_line_tensor[i], hidden)
+        output, hidden = net(category_tensor, input_line_tensor[i], hidden)
         l = criterion(output, target_line_tensor[i])
         loss += l
     
     loss.backward()
 
-    for p in rnn.parameters():
+    for p in net.parameters():
         p.data.add_(p.grad.data, alpha=-learning_rate)
 
     return output, loss.item() / input_line_tensor.size(0)
@@ -165,7 +217,7 @@ total_loss = 0 # reset every plot_every iter
 start = time.time()
 
 for iter in range(1, n_iters + 1):
-    output, loss = train(*randomTrainingExample())
+    output, loss = train(*randomTrainingExample(), net=rnn)
     total_loss += loss
 
     if iter % print_every == 0:
@@ -187,16 +239,16 @@ plt.plot(all_losses)
 # # 4️⃣Sampling the Network
 max_length = 20
 
-def sample(category, start_letter='A'):
+def sample(category, start_letter='A', net=rnn):
     with torch.no_grad():
         category_tensor = categoryTensor(category)
         input_tensor = inputTensor(start_letter)
-        hidden = rnn.initHidden()
+        hidden = net.initHidden()
 
         output_name = start_letter
 
         for i in range(max_length):
-            output, hidden = rnn(category_tensor, input_tensor[0], hidden)
+            output, hidden = net(category_tensor, input_tensor[0], hidden)
             topv, topi = output.topk(1)
             topi = topi[0][0]
             if topi == n_letters - 1:
