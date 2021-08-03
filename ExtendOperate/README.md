@@ -4,15 +4,20 @@ Exclusive and helpful operation with these samples:
 
 - Datasets & Dataloaders
 
-    - `CustomData.py` : Creating a Custom Dataset for your files
+  - `CustomData.py` : Creating a Custom Dataset for your files
 
-    - `DataParallelism.py` : Single machine with mutiple GPUs parallelism train
+  - `DataParallelism.py` : Single machine with mutiple GPUs parallelism train
 
 - Visualizing with TensorBoard
 
-    - `Visualizing.py` : Visualizing Models, Data and Training in TensorBoard
+  - `Visualizing.py` : Visualizing Models, Data and Training in TensorBoard
 
 - Save and Load Model
 
-    - `saver_net_parma.py` : Saving and Loading Model Weights or Model with Shapes
+  - `saver_net_parma.py` : Saving and Loading Model Weights or Model with Shapes
 
+- Model Optimization
+  
+  - `ProfilerAPIusage.py` : Introduce Pytorch Profiler API operation and improve memory and time with a custom net module in example
+  
+  - `ProfilerWithTensorboard.py` : Add profiler information with ResNet18 on FashionMNIST dataset to TensorBoard
