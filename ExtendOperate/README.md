@@ -19,3 +19,5 @@ Exclusive and helpful operation with these samples:
 - Model Optimization
   
   - `ProfilerAPIusage.py` : Introduce Pytorch Profiler API operation and improve memory and time with a custom net module in example
+  
+  - `ProfilerWithTensorboard.py` : Add profiler information with ResNet18 on FashionMNIST dataset to TensorBoard
