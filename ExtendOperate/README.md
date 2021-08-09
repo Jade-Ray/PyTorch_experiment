@@ -21,3 +21,7 @@ Exclusive and helpful operation with these samples:
   - `ProfilerAPIusage.py` : Introduce Pytorch Profiler API operation and improve memory and time with a custom net module in example
   
   - `ProfilerWithTensorboard.py` : Add profiler information with ResNet18 on FashionMNIST dataset to TensorBoard
+
+- Parallel and Distributed Training
+
+  - `Single_machine_model_parallel.py` : Introduce Model Parallel while the model too big to train, and speed up by pipeline inputs in Model Parallel
