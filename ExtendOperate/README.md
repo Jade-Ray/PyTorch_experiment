@@ -25,3 +25,5 @@ Exclusive and helpful operation with these samples:
 - Parallel and Distributed Training
 
   - `Single_machine_model_parallel.py` : Introduce Model Parallel while the model too big to train, and speed up by pipeline inputs in Model Parallel
+
+  - `Distributed_data_parallel.py`: Introduce how to using DistributedDataParallel(DDP) implements data parallelism at the module level which can run across multiple machines
