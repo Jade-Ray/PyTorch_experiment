@@ -1,8 +1,10 @@
 # %% [markdown]
 # # Applicate SimCLR with PyTorch referred [official github repo](https://github.com/sthalles/SimCLR)
 
+# %%
 import torch
 import torch.backends.cudnn as cudnn
+from torch.functional import Tensor
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.cuda.amp import GradScaler, autocast
@@ -27,6 +29,8 @@ writer = SummaryWriter(LOG_DIR)
 
 # %% [markdown]
 # 💠Load and generate dataset
+
+# %%
 ROOT_FOLDER = 'data'
 DATASET_NAME = 'stl10'
 VIEW_NUM = 2 # Number of views for contrastive learning training
@@ -71,7 +75,31 @@ train_loader = torch.utils.data.DataLoader(
     num_workers=NUM_WORKERS, pin_memory=True, drop_last = True)
 
 # %% [markdown]
+# *imshow dataset and randomly DA images*
+
+# %%
+import matplotlib.pyplot as plt
+import numpy as np
+import torchvision
+
+print(f'imshow first {DATASET_NAME} dataset origin image')
+plt.imshow(np.transpose(train_dataset.data[1], (1, 2, 0)))
+plt.show()
+
+# %%
+print(f'imshow {DATASET_NAME} dataset DA compared images')
+dataiter = iter(train_loader)
+images, _ = dataiter.next()
+compared_images = torch.cat((images[0][:4], images[1][:4]), 0)
+img_grid = torchvision.utils.make_grid(compared_images, nrow=4)
+plt.imshow(np.transpose(img_grid, (1, 2, 0)))
+plt.show()
+writer.add_image('data_augment_compared_images', img_grid)
+
+# %% [markdown]
 # 💠Generate SimCLR Net model
+
+# %%
 BASE_MODEL = 'resnet18'
 OUT_DIM = 128
 LEARNING_RATE = 0.0003
@@ -98,8 +126,8 @@ class ResNetSimCLR(nn.Module):
 
     def info_nce_loss(self, features):
 
-        labels = torch.cat([torch.arange(BATCH_SIZE) for i in range(VIEW_NUM)], dim=0)
-        labels = (labels.unsqueeze(0) == labels.unsqueeze(1)).float()
+        labels = torch.cat([torch.arange(BATCH_SIZE) for i in range(VIEW_NUM)], dim=0) # [BS * VN]
+        labels = (labels.unsqueeze(0) == labels.unsqueeze(1)).float() # [BS * VN, BS * VN] eye matrix
         labels = labels.to(device)
 
         features = F.normalize(features, dim=1)
@@ -134,10 +162,12 @@ criterion = torch.nn.CrossEntropyLoss().to(device)
 
 # %% [markdown]
 # 💠Training model
+
+# %%
 EPOCHS = 200
 LOG_EVERY_STEP = 5
 
-def accuracy(output, target, topk=(1,)):
+def accuracy(output: torch.Tensor, target, topk=(1,)):
     with torch.no_grad():
         maxk = max(topk)
         batch_size = target.size(0)
@@ -172,7 +202,7 @@ def train():
 
             optimizer.zero_grad()
 
-            scaler.scal(loss).backward()
+            scaler.scale(loss).backward()
 
             scaler.step(optimizer)
             scaler.update()
