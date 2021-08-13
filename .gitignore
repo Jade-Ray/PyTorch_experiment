@@ -8,6 +8,7 @@
 *.pt
 *.pkl
 *.pth
+*.pth.tar
 **/runs
 
 # downloade Dataset and model
