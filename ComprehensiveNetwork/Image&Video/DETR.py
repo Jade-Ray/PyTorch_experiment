@@ -10,6 +10,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
+from torchvision import models
 
 from torchvision.models import resnet50 
 import torchvision.transforms as T
@@ -187,5 +188,115 @@ im = Image.open('data/000000039769.jpg')
 scores, boxes = detect(im, detr, transform)
 
 plot_results(im, scores, boxes)
+
+# %% [markdown]
+# ## Detection-Visualize encoder-decoder multi-head attention weights
+#
+# using hooks to extract attention weights (averaged over all heads) from the transformer.
+
+# %%
+# use lists to store the outputs via up-values
+conv_features, enc_atten_weights, dec_atten_weights = [], [], []
+
+hooks = [
+    detr.backbone.layer4.register_forward_hook(
+        lambda self, input, output: conv_features.append(output)
+    ),
+    detr.transformer.encoder.layers[-1].self_attn.register_forward_hook(
+        lambda self, input, output: enc_atten_weights.append(output[1])
+    ),
+    detr.transformer.decoder.layers[-1].multihead_attn.register_forward_hook(
+        lambda self, input, output: dec_atten_weights.append(output[1])
+    ),
+]
+
+# propagate through the model
+with torch.no_grad():
+    outputs = detr(transform(im).unsqueeze(0).to(device))
+probas = outputs['pred_logits'].softmax(-1)[0, :, :-1].cpu() # [100, 91]
+keep = (probas.max(-1).values > 0.7)
+bboxes_scaled = rescale_bboxes(outputs['pred_boxes'][0, keep], im.size).cpu()
+
+for hook in hooks:
+    hook.remove()
+
+# don't need the list anymore
+conv_features = conv_features[0].cpu()
+enc_atten_weights = enc_atten_weights[0].cpu()
+dec_atten_weights = dec_atten_weights[0].cpu()
+
+# %%
+# get the feature map shape
+h, w = conv_features.shape[-2:]
+
+fig, axs = plt.subplots(ncols=len(bboxes_scaled), nrows=2, figsize=(22, 7))
+colors = COLORS * 100
+for idx, ax_i, (xmin, ymin, xmax, ymax) in zip(keep.nonzero(), axs.T, bboxes_scaled):
+    ax = ax_i[0]
+    ax.imshow(dec_atten_weights[0, idx].view(h, w))
+    ax.axis('off')
+    ax.set_title(f'query id: {idx.item()}')
+    ax = ax_i[1]
+    ax.imshow(im)
+    ax.add_patch(plt.Rectangle((xmin, ymin), xmax - xmin, ymax - ymin, fill=False, color='blue', linewidth=3))
+    ax.axis('off')
+    ax.set_title(CLASSES[probas[idx].argmax()])
+fig.tight_layout()
+plt.show()
+
+# %% [markdown]
+# ## Visualize encoder self-attention weights
+# the self-attention is square matrix of size [H * W, H * W], reshape it so that it has a more interpretable representation of [H, W, H, W]
+
+# %%
+# output of the CNN
+f_map = conv_features
+print('Encoder attention:               ', enc_atten_weights[0].shape)
+print('Feature map:                     ', f_map.shape)
+
+# %%
+# get the HxW shape of the feature maps of the CNN
+shape = f_map.shape[-2:]
+# and reshape the self-attention to a more interpretable shape
+sattn = enc_atten_weights[0].reshape(shape + shape)
+print("Reshaped self-attention:", sattn.shape)
+
+# %%
+# downsampling factory for the CNN, is 32 for DETR and 16 for DETR DC5
+fact = 32
+
+# Let's select 4 reference points for visualization
+idxs = [(150, 160), (250, 300), (200, 600), (440, 800),]
+
+# here we create the canvas
+fig = plt.figure(constrained_layout=True, figsize=(25 * 0.7, 8.5 * 0.7))
+# and we add one plot per reference point
+gs = fig.add_gridspec(2, 4)
+axs = [
+    fig.add_subplot(gs[0, 0]),
+    fig.add_subplot(gs[1, 0]),
+    fig.add_subplot(gs[0, -1]),
+    fig.add_subplot(gs[1, -1]),
+]
+
+# for each one of the reference points, Let's plot the self-attention
+# for that point
+for idx_o, ax in zip(idxs, axs):
+    idx = (idx_o[0] // fact, idx_o[1] // fact)
+    ax.imshow(sattn[..., idx[0], idx[1]], cmap='cividis', interpolation='nearest')
+    ax.axis('off')
+    ax.set_title(f'self-attention{idx_o}')
+
+# and now let's add the central image, with the reference points as red circles
+fcenter_ax = fig.add_subplot(gs[:, 1:-1])
+fcenter_ax.imshow(im)
+for (y, x) in idxs:
+    scale = im.height / transform(im).unsqueeze(0).shape[-2]
+    x = ((x // fact) + 0.5) * fact
+    y = ((y // fact) + 0.5) * fact
+    fcenter_ax.add_patch(plt.Circle((x * scale, y * scale), fact // 2, color='r'))
+    fcenter_ax.axis('off')
+
+plt.show()
 
 # %%
