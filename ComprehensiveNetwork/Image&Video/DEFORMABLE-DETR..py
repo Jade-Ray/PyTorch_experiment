@@ -5,7 +5,7 @@
 # %%
 import math
 import copy
-from typing import Optional
+from typing import Optional, Dict, List
 
 import torch
 from torch import nn
@@ -21,6 +21,45 @@ from torchvision.models._utils import IntermediateLayerGetter
 # with default hidden dim 256
 
 # %%
+HIDDEN_DIM = 256
+NHEADS = 8
+ENC_LAYERS = 6
+DEC_LAYERS = 6
+DIM_FEEDFORWARD = 1024
+DROPOUT = 0.1
+NUM_FEATURE_LEVELS = 4
+ENC_N_POINTS = 4
+DEC_N_POINTS = 4
+NUM_QUERIES = 300
+
+# %% [markdown]
+# #### The part of model of positionEmbed and backbone
+
+# %%
+def _max_by_axis(the_list):
+    # type: (List[List[int]]) -> List[int]   
+    maxes = the_list[0]
+    for sublist in the_list[1:]:
+        for index, item in enumerate(sublist):
+            maxes[index] = max(maxes[index], item)
+    return maxes # [max_c, max_h, max_w]
+
+def nested_tensor_from_tensor_list(tensor_list: List[Tensor]):
+    if tensor_list[0].ndim == 3:
+        max_size = _max_by_axis([list(img.shape) for img in tensor_list])
+        batch_shape = [len(tensor_list)] + max_size
+        b, c, h, w = batch_shape
+        dtype = tensor_list[0].dtype
+        device = tensor_list[0].device
+        tensor = torch.zeros(batch_shape, dtype=dtype, device=device)
+        mask = torch.ones((b, h, w), dtype=torch.bool, device=device)
+        for img, pad_img, m in zip(tensor_list, tensor, mask):
+            pad_img[: img.shape[0], : img.shape[1], : img.shape[2]].copy_(img)
+            m[: img.shape[1], :img.shape[2]] = False
+    else:
+        raise ValueError('not supported')
+    return NestedTensor(tensor, mask)
+
 class NestedTensor(object):
     def __init__(self, tensors, mask: Optional[Tensor]) -> None:
         self.tensors = tensors
@@ -83,8 +122,19 @@ class Backbone(nn.Module):
         
         self.body = IntermediateLayerGetter(backbone, return_layers=return_layers) # this function return the dict with defined layers
 
-    def forward(self, tensor_list):
-        pass
+    def forward(self, tensor_list: NestedTensor):
+        """ The forward expects a NestedTensor, which consists of:
+               - samples.tensor: batched images, of shape [batch_size x 3 x H x W]
+               - samples.mask: a binary mask of shape [batch_size x H x W], containing 1 on padded pixels
+        """
+        xs = self.body(tensor_list.tensors) # {'0': [bs, 512, h_0, w_0], '1': [bs, 1024, h_1, w_1], '2': [bs, 2048, h_2, w_2]}
+        out: Dict[str, NestedTensor] = {}
+        for name, x in xs.items():
+            m = tensor_list.mask
+            assert m is not None
+            mask = F.interpolate(m[None].float(), size=x.shape[-2:]).to(torch.bool)[0] # unsample mask with mulit-level size from image mask
+            out[name] = NestedTensor(x, mask)
+        return out
 
 class PositionEmbeddingSine(nn.Module):
     """
@@ -93,7 +143,7 @@ class PositionEmbeddingSine(nn.Module):
     """
     def __init__(self, num_pos_feats=64, temperature=10000, normalize=False, scale=None):
         super().__init__()
-        self.num_pos_feats = num_pos_feats
+        self.num_pos_feats = num_pos_feats # embed length
         self.temperature = temperature
         self.normalize = normalize
         if scale is not None and normalize is False:
@@ -102,12 +152,46 @@ class PositionEmbeddingSine(nn.Module):
             scale = 2 * math.pi
         self.scale = scale
 
-    def forward(self, x, mask):
-        pass
+    def forward(self, tensor_list: NestedTensor):
+        x = tensor_list.tensors # [bs, c, h, w]
+        mask = tensor_list.mask # [bs, h, w]
+        assert mask is not None
+        not_mask = ~mask
+        y_embed = not_mask.cumsum(1, dtype=torch.float32) # 列累加和
+        x_embed = not_mask.cumsum(2, dtype=torch.float32) # 行累加和
+        if self.normalize:
+            eps = 1e-6
+            y_embed = (y_embed - 0.5) / (y_embed[:, -1, :] + eps) * self.scale
+            x_embed = (x_embed - 0.5) / (x_embed[:, :, -1] + eps) * self.scale
+
+        dim_t = torch.arange(self.num_pos_feats, dtype=torch.float32, device=x.device) # 特征维度上的索引
+        dim_t = self.temperature ** (2 * (dim_t // 2) / self.num_pos_feats)
+        
+        pos_x = x_embed[:, :, :, None] / dim_t # [bs, h, w, num_pos_feat]
+        pos_y = y_embed[:, :, :, None] / dim_t
+        pos_x = torch.stack((pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4).flatten(3) # [bs, h, w, num_pos_feats//2, 2] -> [bs, h, w, num_pos_feat]
+        pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
+        pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2) # [bs, h, w, 2 * num_pos_feats] -> [bs, 2 * num_pos_feats, h, w]
+        return pos
 
 class Joniner(nn.Sequential):
     def __init__(self, backbone, position_embedding):
         super().__init__(backbone, position_embedding)
+        self.strides = backbone.strides
+        self.num_channels = backbone.num_channels
+        
+    def forward(self, tensor_list: NestedTensor):
+        xs = self[0](tensor_list)
+        out: List[NestedTensor] = []
+        pos = []
+        for name, x in sorted(xs.items()):
+            out.append(x) # [nl, bs, num_channel, h, w]
+        
+        # position encoding
+        for x in out:
+            pos.append(self[1](x).to(x.tensors.dtype)) # [nl, bs, 2 * num_pos_feats, h, w]
+        
+        return out, pos
 
 # %% [markdown]
 # #### The part of model of multi-scale deformable attention
@@ -438,10 +522,87 @@ class DeformableTransformerDecoder(nn.Module):
 def _get_clones(module, N):
     return nn.ModuleList([copy.deepcopy(module) for i in range(N)])
 
+# %% [markdown]
+# #### The main of Deformable Detr model
+
+# %%
 class DeformableDETR(nn.Module):
     def __init__(self, num_classes, num_queries, num_feature_levels):
+        """Initializes the model.
+
+        Args:
+            num_classes (int): number of object classes
+            num_queries (int): number of object queries
+            num_feature_levels (int): num feature lecels
+        """
         super().__init__()
 
         # create ResNet50 backbone
+        position_embedding = PositionEmbeddingSine(HIDDEN_DIM // 2, normalize=True)
+        backbone = Joniner(Backbone(), position_embedding)
+        
+        # create deformable transformer
+        transformer = DeformableTransformer(HIDDEN_DIM, NHEADS, ENC_LAYERS, DEC_LAYERS, 
+                                            DIM_FEEDFORWARD, DROPOUT, False, 
+                                            NUM_FEATURE_LEVELS, DEC_N_POINTS, ENC_N_POINTS)
+        
+        self.num_queries = num_queries
+        self.transformer = transformer
+        hidden_dim = transformer.d_model
+        self.class_embed = nn.Linear(hidden_dim, num_classes)
+        self.bbox_embed = MLP(hidden_dim, hidden_dim, 4, 3)
+        self.num_feature_levels = num_feature_levels
+        
+        num_backbone_outs = len(backbone.strides)
+        input_proj_list = []
+        for _ in range(num_backbone_outs):
+            in_channels = backbone.num_channels[_]
+            input_proj_list.append(nn.Sequential(
+                nn.Conv2d(in_channels, hidden_dim, kernel_size=1),
+                nn.GroupNorm(32, hidden_dim), 
+            ))
+        for _ in range(num_feature_levels - num_backbone_outs):
+            input_proj_list.append(nn.Sequential(
+                nn.Conv2d(in_channels, hidden_dim, kernel_size=3, stride=2, padding=1),
+                nn.GroupNorm(32, hidden_dim), 
+            ))
+            in_channels = hidden_dim
+        self.input_proj = nn.ModuleList(input_proj_list)
+        self.backbone = backbone
+        
+    def forward(self, samples: NestedTensor):
+        """ The forward expects a NestedTensor, which consists of:
+               - samples.tensor: batched images, of shape [batch_size x 3 x H x W]
+               - samples.mask: a binary mask of shape [batch_size x H x W], containing 1 on padded pixels
+
+            It returns a dict with the following elements:
+               - "pred_logits": the classification logits (including no-object) for all queries.
+                                Shape= [batch_size x num_queries x (num_classes + 1)]
+               - "pred_boxes": The normalized boxes coordinates for all queries, represented as
+                               (center_x, center_y, height, width). These values are normalized in [0, 1],
+                               relative to the size of each individual image (disregarding possible padding).
+                               See PostProcess for information on how to retrieve the unnormalized bounding box.
+               - "aux_outputs": Optional, only returned when auxilary losses are activated. It is a list of
+                                dictionnaries containing the two above keys for each decoder layer.
+        """    
+        if not isinstance(samples, NestedTensor):
+            samples = nested_tensor_from_tensor_list(samples)
+        features, pos = self.backbone(samples)
+        
+        srcs = []
+        masks = []
         
         
+class MLP(nn.Module):
+    """ Very simple multi-layer perceptron (also called FFN) """     
+       
+    def __init__(self, input_dim, hidden_dim, output_dim, num_layers):
+        super().__init__()
+        self.num_layers = num_layers
+        h = [hidden_dim] * (num_layers - 1)
+        self.layers = nn.ModuleList(nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim]))
+        
+    def forward(self, x):
+        for i, layer in enumerate(self.layers):
+            x = F.relu(layer(x)) if i < self.num_layers - 1 else layer(x)
+        return x
