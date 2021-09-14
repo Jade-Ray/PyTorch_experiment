@@ -183,7 +183,7 @@ def plot_results(pil_img, prob, boxes):
     plt.axis('off')
     plt.show()
 
-im = Image.open('data/000000039769.jpg')
+im = Image.open('data/00002.jpg')
 
 scores, boxes = detect(im, detr, transform)
 
@@ -266,7 +266,7 @@ print("Reshaped self-attention:", sattn.shape)
 fact = 32
 
 # Let's select 4 reference points for visualization
-idxs = [(150, 160), (250, 300), (200, 600), (440, 800),]
+idxs = [(150, 160), (300, 250), (200, 600), (440, 800),]
 
 # here we create the canvas
 fig = plt.figure(constrained_layout=True, figsize=(25 * 0.7, 8.5 * 0.7))
