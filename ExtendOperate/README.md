@@ -27,3 +27,5 @@ Exclusive and helpful operation with these samples:
   - `Single_machine_model_parallel.py` : Introduce Model Parallel while the model too big to train, and speed up by pipeline inputs in Model Parallel
 
   - `Distributed_data_parallel.py`: Introduce how to using DistributedDataParallel(DDP) implements data parallelism at the module level which can run across multiple machines
+
+  - `Distributed_application.py`: Introduce distributed package of PyTorch and how to set up the distributed setting with different communication strategies.
