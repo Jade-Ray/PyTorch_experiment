@@ -759,12 +759,14 @@ def detect(im, model, transform):
     outputs = model(img.to(device))
     
     # keep only predictions with 0.4+ confidence
-    probas = outputs['pred_logits'].softmax(-1)[0, :, :-1] # [100, 91]
-    keep = probas.max(-1).values > 0.4
+    out_logits = outputs['pred_logits']
+    prob = out_logits.sigmoid()
+    # prob = out_logits.softmax(-1)
+    keep = prob.max(-1).values > 0.4
     
     # convert boxes from [0; 1] to image scales
-    bboxes_scaled = rescale_bboxes(outputs['pred_boxes'][0, keep], im.size)
-    return probas[keep].cpu(), bboxes_scaled.cpu()
+    bboxes_scaled = rescale_bboxes(outputs['pred_boxes'][keep], im.size)
+    return prob[keep].cpu(), bboxes_scaled.cpu()
 
 def plot_results(pil_img, prob, boxes):
     plt.figure(figsize=(16, 10))
@@ -778,7 +780,7 @@ def plot_results(pil_img, prob, boxes):
     plt.axis('off')
     plt.show()
     
-im = Image.open('data/000000039769.jpg')
+im = Image.open('data/000000001730.jpg')
 
 scores, boxes = detect(im, model, transform)
 
