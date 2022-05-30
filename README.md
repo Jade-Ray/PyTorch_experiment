@@ -8,5 +8,5 @@
 
 ## Referencing from this websites
 
-* [MoFanPy](https://mofanpy.com/)
-* [PyTorch Tutorials](https://pytorch.org/tutorials)
+- [MoFanPy](https://mofanpy.com/)
+- [PyTorch Tutorials](https://pytorch.org/tutorials)
