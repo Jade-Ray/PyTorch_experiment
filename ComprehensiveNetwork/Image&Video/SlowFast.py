@@ -8,6 +8,10 @@ import torch.nn as nn
 
 from torchinfo import summary
 
+
+#-----------------------------------------------------------------
+# Stem module
+# ----------------------------------------------------------------
 class ResNetBasicStem(nn.Module):
     """
     ResNe(X)t 3D stem module.
@@ -131,6 +135,114 @@ class VideoModelStem(nn.Module):
             m = getattr(self, f"pathway{pathway}_stem")
             y.append(m(x[pathway]))
         return y
+
+
+#-----------------------------------------------------------------
+# Block module
+# ----------------------------------------------------------------
+def get_trans_func(name):
+    """
+    Retrieves the transformation module by name.
+    """
+    trans_funcs = {
+        "bottleneck_transform": BottleneckTransform,
+        "basic_transform": BasicTransform,
+    }
+    assert (
+        name in trans_funcs.keys()
+    ), "Transformation function '{}' not supported".format(name)
+    return trans_funcs[name]
+
+
+class BasicTransform(nn.Module):
+    """
+    Basic transformation: Tx3x3, 1x3x3, where T is the size of temporal kernel.
+    """
+
+    def __init__(
+        self,
+        dim_in,
+        dim_out,
+        temp_kernel_size,
+        stride,
+        dim_inner=None,
+        num_groups=1,
+        stride_1x1=None,
+        inplace_relu=True,
+        eps=1e-5,
+        bn_mmt=0.1,
+        dilation=1,
+        norm_module=nn.BatchNorm3d,
+        block_idx=0,
+    ):
+        """
+        Args:
+            dim_in (int): the channel dimensions of the input.
+            dim_out (int): the channel dimension of the output.
+            temp_kernel_size (int): the temporal kernel sizes of the first
+                convolution in the basic block.
+            stride (int): the stride of the bottleneck.
+            dim_inner (None): the inner dimension would not be used in
+                BasicTransform.
+            num_groups (int): number of groups for the convolution. Number of
+                group is always 1 for BasicTransform.
+            stride_1x1 (None): stride_1x1 will not be used in BasicTransform.
+            inplace_relu (bool): if True, calculate the relu on the original
+                input without allocating new memory.
+            eps (float): epsilon for batch norm.
+            bn_mmt (float): momentum for batch norm. Noted that BN momentum in
+                PyTorch = 1 - BN momentum in Caffe2.
+            norm_module (nn.Module): nn.Module for the normalization layer. The
+                default is nn.BatchNorm3d.
+        """
+        super(BasicTransform, self).__init__()
+        self.temp_kernel_size = temp_kernel_size
+        self._inplace_relu = inplace_relu
+        self._eps = eps
+        self._bn_mmt = bn_mmt
+        self._construct(dim_in, dim_out, stride, dilation, norm_module)
+
+    def _construct(self, dim_in, dim_out, stride, dilation, norm_module):
+        # Tx3x3, BN, ReLU.
+        self.a = nn.Conv3d(
+            dim_in,
+            dim_out,
+            kernel_size=[self.temp_kernel_size, 3, 3],
+            stride=[1, stride, stride],
+            padding=[int(self.temp_kernel_size // 2), 1, 1],
+            bias=False,
+        )
+        self.a_bn = norm_module(
+            num_features=dim_out, eps=self._eps, momentum=self._bn_mmt
+        )
+        self.a_relu = nn.ReLU(inplace=self._inplace_relu)
+        # 1x3x3, BN.
+        self.b = nn.Conv3d(
+            dim_out,
+            dim_out,
+            kernel_size=[1, 3, 3],
+            stride=[1, 1, 1],
+            padding=[0, dilation, dilation],
+            dilation=[1, dilation, dilation],
+            bias=False,
+        )
+
+        self.b.final_conv = True
+
+        self.b_bn = norm_module(
+            num_features=dim_out, eps=self._eps, momentum=self._bn_mmt
+        )
+
+        self.b_bn.transform_final_bn = True
+
+    def forward(self, x):
+        x = self.a(x)
+        x = self.a_bn(x)
+        x = self.a_relu(x)
+
+        x = self.b(x)
+        x = self.b_bn(x)
+        return x
 
 
 class BottleneckTransform(nn.Module):
@@ -325,6 +437,9 @@ def drop_path(x, drop_prob: float = 0.0, training: bool = False):
     return output
 
 
+#-----------------------------------------------------------------
+# Layer module
+# ----------------------------------------------------------------
 class ResStage(nn.Module):
     """
     Stage of 3D ResNet. It expects to have one or more tensors as input for
@@ -404,7 +519,7 @@ class ResStage(nn.Module):
         for pathway in range(self.num_pathways):
             for i in range(self.num_blocks[pathway]):
                 # Retrieve the transformation function.
-                trans_func = BottleneckTransform
+                trans_func = get_trans_func(trans_func_name)
                 # Construct the block.
                 res_block = ResBlock(
                     dim_in[pathway] if i == 0 else dim_out[pathway],
@@ -460,6 +575,7 @@ class ResStage(nn.Module):
 
 # Number of blocks for different stages given the model depth.
 _MODEL_STAGE_DEPTH = {18: (2, 2, 2, 2), 50: (3, 4, 6, 3), 101: (3, 4, 23, 3)}
+_MODEL_SCALE_RATIO = {18: (1, 2, 4, 8), 50: (4, 8, 16, 32), 101: (4, 8, 16, 32)}
 
 # Basis of temporal kernel sizes for each of the stage.
 _TEMPORAL_KERNEL_BASIS = {
@@ -604,13 +720,14 @@ class SlowFast(nn.Module):
                            resnet_depth, model_arch):
         pool_size = _POOL1[model_arch]
         (d2, d3, d4, d5) = _MODEL_STAGE_DEPTH[resnet_depth]
+        (r2, r3, r4, r5) = _MODEL_SCALE_RATIO[resnet_depth]
         num_groups = num_groups
         width_per_group = width_per_group
         dim_inner = num_groups * width_per_group
         out_dim_ratio = (beta_inv // fusion_conv_channel_ratio)
         temp_kernel = _TEMPORAL_KERNEL_BASIS[model_arch]
         
-        self.s1 = VideoModelStem(
+        self.stem = VideoModelStem(
             dim_in=[3, 3], 
             dim_out=[width_per_group, width_per_group // beta_inv], 
             kernel=[temp_kernel[0][0] + [7, 7], temp_kernel[0][1] + [7, 7]], 
@@ -619,17 +736,17 @@ class SlowFast(nn.Module):
                      [temp_kernel[0][1][0] // 2, 3, 3]],
             norm_module=self.norm_module)
         
-        self.s1_fuse = FuseFastToSlow(
+        self.stem_fuse = FuseFastToSlow(
             width_per_group // beta_inv, 
             fusion_conv_channel_ratio, 
             fusion_kernel_size, 
             alpha, 
             norm_module=self.norm_module,)
         
-        self.s2 = ResStage(
+        self.layer1 = ResStage(
             dim_in=[width_per_group + width_per_group // out_dim_ratio, 
                     width_per_group // beta_inv,],
-            dim_out=[width_per_group * 4, width_per_group * 4 // beta_inv],
+            dim_out=[width_per_group * r2, width_per_group * r2 // beta_inv],
             dim_inner=[dim_inner, dim_inner // beta_inv],
             temp_kernel_sizes=temp_kernel[1],
             stride=[1, 1],
@@ -640,11 +757,11 @@ class SlowFast(nn.Module):
             nonlocal_group=[[1,1]],
             nonlocal_pool=[],
             instantiation="softmax",
-            trans_func_name="bottleneck_transform",
+            trans_func_name="basic_transform",
             dilation=[1,1],
             norm_module=self.norm_module,)
-        self.s2_fuse = FuseFastToSlow(
-            width_per_group * 4 // beta_inv,
+        self.layer1_fuse = FuseFastToSlow(
+            width_per_group * r2 // beta_inv,
             fusion_conv_channel_ratio,
             fusion_kernel_size,
             alpha,
@@ -658,10 +775,10 @@ class SlowFast(nn.Module):
             )
             self.add_module("pathway{}_pool".format(pathway), pool)
             
-        self.s3 = ResStage(
-            dim_in=[width_per_group * 4 + width_per_group * 4 // out_dim_ratio, 
-                    width_per_group * 4 // beta_inv,],
-            dim_out=[width_per_group * 8, width_per_group * 8 // beta_inv],
+        self.layer2 = ResStage(
+            dim_in=[width_per_group * r2 + width_per_group * r2 // out_dim_ratio, 
+                    width_per_group * r2 // beta_inv,],
+            dim_out=[width_per_group * r3, width_per_group * r3 // beta_inv],
             dim_inner=[dim_inner * 2, dim_inner * 2 // beta_inv],
             temp_kernel_sizes=temp_kernel[2],
             stride=[2, 2],
@@ -672,22 +789,22 @@ class SlowFast(nn.Module):
             nonlocal_group=[[1,1]],
             nonlocal_pool=[],
             instantiation="softmax",
-            trans_func_name="bottleneck_transform",
+            trans_func_name="basic_transform",
             dilation=[1,1],
             norm_module=self.norm_module,
         )
-        self.s3_fuse = FuseFastToSlow(
-            width_per_group * 8 // beta_inv,
+        self.layer2_fuse = FuseFastToSlow(
+            width_per_group * r3 // beta_inv,
             fusion_conv_channel_ratio,
             fusion_kernel_size,
             alpha,
             norm_module=self.norm_module,
         )
         
-        self.s4 = ResStage(
-            dim_in=[width_per_group * 8 + width_per_group * 8 // out_dim_ratio, 
-                    width_per_group * 8 // beta_inv,],
-            dim_out=[width_per_group * 16, width_per_group * 16 // beta_inv],
+        self.layer3 = ResStage(
+            dim_in=[width_per_group * r3 + width_per_group * r3 // out_dim_ratio, 
+                    width_per_group * r3 // beta_inv,],
+            dim_out=[width_per_group * r4, width_per_group * r4 // beta_inv],
             dim_inner=[dim_inner * 4, dim_inner * 4 // beta_inv],
             temp_kernel_sizes=temp_kernel[3],
             stride=[2, 2],
@@ -698,22 +815,22 @@ class SlowFast(nn.Module):
             nonlocal_group=[[1,1]],
             nonlocal_pool=[],
             instantiation="softmax",
-            trans_func_name="bottleneck_transform",
+            trans_func_name="basic_transform",
             dilation=[1,1],
             norm_module=self.norm_module,
         )
-        self.s4_fuse = FuseFastToSlow(
-            width_per_group * 16 // beta_inv,
+        self.layer3_fuse = FuseFastToSlow(
+            width_per_group * r4 // beta_inv,
             fusion_conv_channel_ratio,
             fusion_kernel_size,
             alpha,
             norm_module=self.norm_module,
         )
         
-        self.s5 = ResStage(
-            dim_in=[width_per_group * 16 + width_per_group * 16 // out_dim_ratio, 
-                    width_per_group * 16 // beta_inv,],
-            dim_out=[width_per_group * 32, width_per_group * 32 // beta_inv],
+        self.layer4 = ResStage(
+            dim_in=[width_per_group * r4 + width_per_group * r4 // out_dim_ratio, 
+                    width_per_group * r4 // beta_inv,],
+            dim_out=[width_per_group * r5, width_per_group * r5 // beta_inv],
             dim_inner=[dim_inner * 8, dim_inner * 8 // beta_inv],
             temp_kernel_sizes=temp_kernel[4],
             stride=[2, 2],
@@ -724,25 +841,25 @@ class SlowFast(nn.Module):
             nonlocal_group=[[1,1]],
             nonlocal_pool=[],
             instantiation="softmax",
-            trans_func_name="bottleneck_transform",
+            trans_func_name="basic_transform",
             dilation=[1,1],
             norm_module=self.norm_module,
         )
     
     def forward(self, x):
         x = x[:]
-        x = self.s1(x)
-        x = self.s1_fuse(x)
-        x = self.s2(x)
-        x = self.s2_fuse(x)
+        x = self.stem(x)
+        x = self.stem_fuse(x)
+        x = self.layer1(x)
+        x = self.layer1_fuse(x)
         for pathway in range(self.num_pathways):
             pool = getattr(self, "pathway{}_pool".format(pathway))
             x[pathway] = pool(x[pathway])
-        x = self.s3(x)
-        x = self.s3_fuse(x)
-        x = self.s4(x)
-        x = self.s4_fuse(x)
-        x = self.s5(x)
+        x = self.layer2(x)
+        x = self.layer2_fuse(x)
+        x = self.layer3(x)
+        x = self.layer3_fuse(x)
+        x = self.layer4(x)
         return x
         
 
