@@ -15,3 +15,7 @@
 **/Data
 **/data
 **/log
+
+# build
+build
+*.egg-info
