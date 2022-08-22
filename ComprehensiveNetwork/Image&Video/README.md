@@ -2,6 +2,10 @@
 
 Various function about image and video DL with these samples:
 
+- Classification
+
+  - [SwinTransformer](SwinTransformer.py) : *Swin Transformer: Hierarchical Vision Transformer using Shifted Windows*, proposed a hierarchical Transformer whose representation is computed with `Shifted Windows`. This hierarchical architecture has the flexibility to model at various scales and has linear computational complexity with respect to image size.
+
 - Detection
 
   - [FastRcnn](ObjectDetection.py) : Detecte object in image with `FastRcnn`.
