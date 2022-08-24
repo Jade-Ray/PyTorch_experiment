@@ -8,7 +8,7 @@ Various function about image and video DL with these samples:
 
 - Detection
 
-  - [FastRcnn](ObjectDetection.py) : Detecte object in image with `FastRcnn`.
+  - [FastRcnn](ObjectDetection.py) : Official [tutorial](https://pytorch.org/tutorials/intermediate/torchvision_tutorial.html), finetuning a pre-trained `Mask R-CNN` model in the `Penn-Fudan Database` for Pedestrian Detection and Segmentation.
   
   - [DETR](DETR.py) : *End to End Object Detection with Transformer*, instead common detector address set prediction with proposals, anchors and postprocess, this method directly force unique preditions via bi-partite matching in non-local computations of Transformer.
 
