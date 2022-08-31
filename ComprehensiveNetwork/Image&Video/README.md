@@ -12,6 +12,8 @@ Various function about image and video DL with these samples:
   
   - [DETR](DETR.py) : *End to End Object Detection with Transformer*, instead common detector address set prediction with proposals, anchors and postprocess, this method directly force unique preditions via bi-partite matching in non-local computations of Transformer.
 
+  - [SwinTransformer-MaskRcnn](SwinTransformerObjectDetection.py) : Combined `Swin Transformer` backbone and `Mask RCNN` detect head, refer from [Swin-Transformer-Object-Detection](https://github.com/SwinTransformer/Swin-Transformer-Object-Detection)
+
 - Transfer Learning
 
   - [TransferLearning](transferLearning.py) : Using `TransferLearning` to fast train custom data.
