@@ -6,6 +6,7 @@
 - `TorchText`  0.10.0
 - `TorchVision` 0.13.0
 - `pycocotools` 2.0.4
+- `einops`
 
 ## Referencing from this websites
 

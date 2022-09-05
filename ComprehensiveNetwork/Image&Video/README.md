@@ -29,6 +29,8 @@ Various function about image and video DL with these samples:
 - Video Recognition
 
   - [SlowFast](SlowFast.py) : *SlowFast Nestwoks for Video Recognition*, involved a `Slow pathway` to capture spatial semantics and a `Fast pathway` to capture motion at fine temporal resolution.
+  
+  - [VideoSwinTransformer](VideoSwinTransformer.py) : *Video Swin Transformer*, which advocates an inductive bias of locality in video Transformers, leading to a better speed-accuracy trade-off compared to previous approaches which compute self-attention globally even with spatial-temporal factorization. Combined `I3D Head` to classification.
 
 - Others
 
